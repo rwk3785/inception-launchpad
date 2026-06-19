@@ -1,0 +1,50 @@
+id: prfaq-writer
+business_name: "Product Story Generator"
+description: >
+  Generates a press release and FAQ document that articulates the initiative's
+  value proposition from the customer's perspective. Follows the Working Backwards
+  method to keep the team aligned on the outcome before building begins.
+business_outcomes:
+  - Forces customer-centric thinking at the start of the initiative, reducing
+    the likelihood of building features that miss user needs
+  - Produces a shareable narrative that executives and stakeholders can quickly
+    understand without reading a lengthy PRD
+  - Creates an FAQ that anticipates the most common objections and questions,
+    shortening review cycles and go/no-go decisions
+domain:
+  - Customer Experience
+  - Digital Products
+  - Brokerage Operations
+maturity: pilot
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: target_users
+    label: "Target Users"
+    type: text
+    required: true
+  - name: key_benefit
+    label: "Key Benefit"
+    type: text
+    required: true
+outputs:
+  - artifact: PRFAQ.md
+    destination: /docs/inception/
+    description: >
+      Working Backwards press release and FAQ covering the product vision,
+      customer benefit, and answers to anticipated questions
+workflow: .github/workflows/run-prfaq-writer.yml
+bundle: inception-full-package
+tags:
+  - prfaq
+  - product-story
+  - working-backwards
+  - inception
+  - brokerage

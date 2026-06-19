@@ -1,0 +1,53 @@
+id: stakeholder-analyzer
+business_name: "Stakeholder Impact Analyzer"
+description: >
+  Identifies all stakeholders affected by the initiative and analyzes their
+  interests, influence level, and change impact. Produces a structured map
+  that project teams can use to plan engagement and communications.
+business_outcomes:
+  - Surfaces hidden stakeholders early, reducing the risk of late-stage
+    objections or blockers that derail delivery timelines
+  - Gives project sponsors a clear influence-and-interest map to prioritize
+    engagement effort where it matters most
+  - Documents change impact per stakeholder group, enabling targeted
+    communications planning before kickoff
+domain:
+  - Brokerage Operations
+  - Customer Experience
+  - Compliance & Risk
+  - Digital Products
+  - Data & Analytics
+maturity: pilot
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: business_domain
+    label: "Business Domain"
+    type: select
+    required: true
+    options:
+      - "Brokerage Operations"
+      - "Customer Experience"
+      - "Compliance & Risk"
+      - "Digital Products"
+      - "Data & Analytics"
+outputs:
+  - artifact: STAKEHOLDER_ANALYSIS.md
+    destination: /docs/inception/
+    description: >
+      Stakeholder register with roles, influence levels, impact assessment,
+      and recommended engagement strategies
+workflow: .github/workflows/run-stakeholder-analyzer.yml
+bundle: inception-full-package
+tags:
+  - stakeholders
+  - impact-analysis
+  - inception
+  - brokerage

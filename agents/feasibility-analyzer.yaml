@@ -1,0 +1,67 @@
+id: feasibility-analyzer
+business_name: "Viability Checker"
+description: >
+  Assesses the technical, business, and resource feasibility of an initiative
+  given its constraints, dependencies, and timeline. Produces a structured
+  report that supports informed go/no-go and prioritization decisions.
+business_outcomes:
+  - Surfaces blockers and risks before significant investment is made, saving
+    teams from building toward an undeliverable outcome
+  - Provides leadership with an evidence-based recommendation to support
+    portfolio prioritization and funding decisions
+  - Identifies key dependencies early so teams can begin resolution in parallel
+    with the inception process
+domain:
+  - Brokerage Operations
+  - Compliance & Risk
+  - Digital Products
+  - Data & Analytics
+maturity: pilot
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: business_domain
+    label: "Business Domain"
+    type: select
+    required: true
+    options:
+      - "Brokerage Operations"
+      - "Customer Experience"
+      - "Compliance & Risk"
+      - "Digital Products"
+      - "Data & Analytics"
+  - name: timeline_constraint
+    label: "Timeline Constraint"
+    type: select
+    required: true
+    options:
+      - "30 days"
+      - "60 days"
+      - "90 days"
+      - "6 months"
+      - "12 months"
+  - name: key_dependencies
+    label: "Key Dependencies"
+    type: textarea
+    required: false
+outputs:
+  - artifact: FEASIBILITY_REPORT.md
+    destination: /docs/inception/
+    description: >
+      Feasibility assessment covering technical complexity, business viability,
+      resource requirements, risk factors, and a go/no-go recommendation
+workflow: .github/workflows/run-feasibility-analyzer.yml
+bundle: inception-full-package
+tags:
+  - feasibility
+  - viability
+  - risk
+  - inception
+  - brokerage

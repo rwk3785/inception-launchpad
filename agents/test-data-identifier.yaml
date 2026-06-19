@@ -1,0 +1,60 @@
+id: test-data-identifier
+business_name: "Test Scenario Finder"
+description: >
+  Identifies the test data needs, scenario coverage, and compliance-aware
+  data requirements for an initiative before development begins. Helps QA
+  and engineering teams avoid test-data gaps that delay release cycles.
+business_outcomes:
+  - Eliminates last-minute test data scrambles by defining data needs during
+    inception, when they are cheapest to plan and provision
+  - Ensures regulatory and compliance data handling requirements are captured
+    upfront, reducing the risk of audit findings post-release
+  - Accelerates QA onboarding by providing a structured scenario catalog that
+    test engineers can begin designing against immediately
+domain:
+  - Brokerage Operations
+  - Compliance & Risk
+  - Digital Products
+  - Data & Analytics
+maturity: experimental
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: key_user_flows
+    label: "Key User Flows"
+    type: textarea
+    required: true
+  - name: compliance_requirements
+    label: "Compliance Requirements"
+    type: select
+    required: true
+    options:
+      - "None"
+      - "FINRA"
+      - "SEC"
+      - "SOX"
+      - "PCI-DSS"
+      - "Multiple"
+outputs:
+  - artifact: TEST_DATA_REQUIREMENTS.md
+    destination: /docs/inception/
+    description: >
+      Test data requirements document covering scenario catalog, data
+      attributes, volume estimates, compliance constraints, and provisioning
+      recommendations
+workflow: .github/workflows/run-test-data-identifier.yml
+bundle: inception-full-package
+tags:
+  - test-data
+  - qa
+  - scenarios
+  - compliance
+  - inception
+  - brokerage

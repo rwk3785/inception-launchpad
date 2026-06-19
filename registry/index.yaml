@@ -1,0 +1,70 @@
+bundle: inception-full-package
+description: >
+  AI-powered agents that produce the complete set of inception artifacts for
+  new brokerage platform initiatives. Run agents individually or use the
+  orchestrator to generate all five artifacts in a single pass.
+agents:
+  - id: orchestrator
+    business_name: "Full Inception Package"
+    maturity: pilot
+    bundle: inception-full-package
+    tags:
+      - orchestrator
+      - inception
+      - full-package
+      - brokerage
+
+  - id: stakeholder-analyzer
+    business_name: "Stakeholder Impact Analyzer"
+    maturity: pilot
+    bundle: inception-full-package
+    tags:
+      - stakeholders
+      - impact-analysis
+      - inception
+      - brokerage
+
+  - id: prfaq-writer
+    business_name: "Product Story Generator"
+    maturity: pilot
+    bundle: inception-full-package
+    tags:
+      - prfaq
+      - product-story
+      - working-backwards
+      - inception
+      - brokerage
+
+  - id: epic-generator
+    business_name: "Work Breakdown Builder"
+    maturity: experimental
+    bundle: inception-full-package
+    tags:
+      - epics
+      - work-breakdown
+      - backlog
+      - inception
+      - brokerage
+
+  - id: feasibility-analyzer
+    business_name: "Viability Checker"
+    maturity: pilot
+    bundle: inception-full-package
+    tags:
+      - feasibility
+      - viability
+      - risk
+      - inception
+      - brokerage
+
+  - id: test-data-identifier
+    business_name: "Test Scenario Finder"
+    maturity: experimental
+    bundle: inception-full-package
+    tags:
+      - test-data
+      - qa
+      - scenarios
+      - compliance
+      - inception
+      - brokerage

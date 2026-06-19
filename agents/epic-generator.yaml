@@ -1,0 +1,51 @@
+id: epic-generator
+business_name: "Work Breakdown Builder"
+description: >
+  Breaks an initiative into well-defined epics with business context, acceptance
+  criteria, and clear scope boundaries. Gives delivery teams a structured
+  starting point for sprint planning without requiring a full discovery phase.
+business_outcomes:
+  - Reduces planning ramp-up time by delivering a ready-to-refine epic backlog
+    that teams can immediately review with product owners
+  - Makes scope boundaries explicit, preventing scope creep and misaligned
+    expectations between business and engineering teams
+  - Ties each epic to a business outcome, ensuring delivery work stays connected
+    to the problem being solved
+domain:
+  - Brokerage Operations
+  - Customer Experience
+  - Digital Products
+  - Data & Analytics
+maturity: experimental
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: scope_boundaries
+    label: "Scope Boundaries (what is in and out of scope)"
+    type: textarea
+    required: true
+  - name: target_users
+    label: "Target Users"
+    type: text
+    required: true
+outputs:
+  - artifact: EPICS.md
+    destination: /docs/inception/
+    description: >
+      Structured epic list with business context, scope boundaries, and
+      high-level acceptance criteria for each epic
+workflow: .github/workflows/run-epic-generator.yml
+bundle: inception-full-package
+tags:
+  - epics
+  - work-breakdown
+  - backlog
+  - inception
+  - brokerage

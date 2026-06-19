@@ -1,0 +1,67 @@
+id: orchestrator
+business_name: "Full Inception Package"
+description: >
+  Runs all five inception subagents in sequence to produce the complete set of
+  inception artifacts for a new initiative. Use this when you want everything
+  generated in a single pass.
+business_outcomes:
+  - Delivers a ready-to-review inception package in one click, eliminating
+    multi-day manual coordination across disciplines
+  - Ensures consistent, structured outputs across stakeholder, product, planning,
+    feasibility, and test-data dimensions for every initiative
+  - Accelerates time-to-alignment by giving leadership a complete picture before
+    the first planning meeting
+domain:
+  - Brokerage Operations
+  - Customer Experience
+  - Compliance & Risk
+  - Digital Products
+  - Data & Analytics
+maturity: pilot
+owner: "Platform Engineering"
+inputs:
+  - name: project_name
+    label: "Project Name"
+    type: text
+    required: true
+  - name: business_problem
+    label: "Business Problem"
+    type: textarea
+    required: true
+  - name: target_users
+    label: "Target Users"
+    type: text
+    required: true
+  - name: business_domain
+    label: "Business Domain"
+    type: select
+    required: true
+    options:
+      - "Brokerage Operations"
+      - "Customer Experience"
+      - "Compliance & Risk"
+      - "Digital Products"
+      - "Data & Analytics"
+outputs:
+  - artifact: STAKEHOLDER_ANALYSIS.md
+    destination: /docs/inception/
+    description: Stakeholder map and impact assessment for the initiative
+  - artifact: PRFAQ.md
+    destination: /docs/inception/
+    description: Press release and FAQ framing the product story
+  - artifact: EPICS.md
+    destination: /docs/inception/
+    description: Epics with business context and scope boundaries
+  - artifact: FEASIBILITY_REPORT.md
+    destination: /docs/inception/
+    description: Technical, business, and resource feasibility assessment
+  - artifact: TEST_DATA_REQUIREMENTS.md
+    destination: /docs/inception/
+    description: Test data needs and scenarios for the initiative
+workflow: .github/workflows/run-orchestrator.yml
+bundle: inception-full-package
+tags:
+  - orchestrator
+  - inception
+  - full-package
+  - brokerage

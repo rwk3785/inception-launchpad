@@ -1,6 +1,6 @@
 name: Feasibility Analyzer
 
-"on":
+on:
   workflow_dispatch:
     inputs:
       project_name:

@@ -1,6 +1,6 @@
 name: Epic Generator
 
-"on":
+on:
   workflow_dispatch:
     inputs:
       project_name:

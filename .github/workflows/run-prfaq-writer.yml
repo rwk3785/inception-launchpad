@@ -1,6 +1,6 @@
 name: PRFAQ Writer
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       project_name:

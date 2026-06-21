@@ -1,0 +1,101 @@
+name: PRFAQ Writer
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      target_users:
+        description: "Target Users"
+        required: true
+        type: string
+      key_benefit:
+        description: "Key Benefit"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate PRFAQ with Claude
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          TARGET_USERS="${{ inputs.target_users }}"
+          KEY_BENEFIT="${{ inputs.key_benefit }}"
+
+          PROMPT="Generate a Press Release and FAQ document for a brokerage product initiative with the following details:
+
+Project Name: ${PROJECT_NAME}
+Business Problem: ${BUSINESS_PROBLEM}
+Target Users: ${TARGET_USERS}
+Key Benefit: ${KEY_BENEFIT}
+
+The press release should follow the Amazon Working Backwards format:
+- Headline
+- Subheadline
+- Location and date
+- Body paragraphs describing the customer problem and solution
+- A customer quote
+- A call to action
+
+The FAQ section should have 8-10 questions covering:
+- Customer value
+- Key features
+- Risks
+- Success metrics
+
+Write in plain business language, not technical jargon. Format the entire document as structured markdown."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 4096,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }")
+
+          echo "API Response received"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "ERROR: Empty or null response from API"
+            echo "Full response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "$CONTENT" > output.md
+
+      - name: Save artifact
+        run: |
+          mkdir -p docs/inception
+          cp output.md docs/inception/PRFAQ.md
+
+      - name: Commit and push
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/
+          git commit -m "feat: Generated PRFAQ for ${{ inputs.project_name }}"
+          git push

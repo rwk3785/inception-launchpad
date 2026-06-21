@@ -1,0 +1,105 @@
+name: Feasibility Analyzer
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      business_domain:
+        description: "Business Domain"
+        required: true
+        type: string
+      timeline_constraint:
+        description: "Timeline Constraint"
+        required: true
+        type: string
+      key_dependencies:
+        description: "Key Dependencies"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Feasibility Report with Claude
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          BUSINESS_DOMAIN="${{ inputs.business_domain }}"
+          TIMELINE_CONSTRAINT="${{ inputs.timeline_constraint }}"
+          KEY_DEPENDENCIES="${{ inputs.key_dependencies }}"
+
+          PROMPT="Produce a feasibility analysis for a brokerage product initiative with the following details:
+
+Project Name: ${PROJECT_NAME}
+Business Problem: ${BUSINESS_PROBLEM}
+Business Domain: ${BUSINESS_DOMAIN}
+Timeline Constraint: ${TIMELINE_CONSTRAINT}
+Key Dependencies: ${KEY_DEPENDENCIES}
+
+The report must cover these sections:
+
+1. Executive Summary - brief overview of the initiative and overall feasibility verdict
+2. Technical Feasibility - complexity assessment, technology risks, integration needs
+3. Business Feasibility - market fit, ROI potential, strategic alignment
+4. Resource Feasibility - team skills required, capacity considerations, budget factors
+5. Timeline Feasibility - given the constraint of \"${TIMELINE_CONSTRAINT}\", assess achievability and propose key milestones
+6. Risk Assessment - top 5 risks with a likelihood/impact matrix (High/Medium/Low for each dimension)
+7. Recommendation - Go / No-Go / Conditional Go with clear rationale
+
+Include a summary scorecard at the very top of the document that rates each feasibility dimension (Technical, Business, Resource, Timeline) on a scale of Red/Amber/Green with a one-line justification.
+
+Format as a professional markdown report."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 4096,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }")
+
+          echo "API Response received"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "ERROR: Empty or null response from API"
+            echo "Full response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "$CONTENT" > output.md
+
+      - name: Save artifact
+        run: |
+          mkdir -p docs/inception
+          cp output.md docs/inception/FEASIBILITY_REPORT.md
+
+      - name: Commit and push
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/
+          git commit -m "feat: Generated Feasibility Report for ${{ inputs.project_name }}"
+          git push

@@ -1,0 +1,229 @@
+name: Inception Orchestrator
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      target_users:
+        description: "Target Users"
+        required: true
+        type: string
+      business_domain:
+        description: "Business Domain"
+        required: true
+        type: string
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trigger PRFAQ Writer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh workflow run run-prfaq-writer.yml \
+            --repo "$REPO" \
+            --field project_name="${{ inputs.project_name }}" \
+            --field business_problem="${{ inputs.business_problem }}" \
+            --field target_users="${{ inputs.target_users }}" \
+            --field key_benefit="Streamlined brokerage experience for ${{ inputs.target_users }}"
+          echo "Triggered PRFAQ Writer"
+
+      - name: Trigger Stakeholder Analyzer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh workflow run run-stakeholder-analyzer.yml \
+            --repo "$REPO" \
+            --field project_name="${{ inputs.project_name }}" \
+            --field business_problem="${{ inputs.business_problem }}" \
+            --field business_domain="${{ inputs.business_domain }}"
+          echo "Triggered Stakeholder Analyzer"
+
+      - name: Trigger Epic Generator
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh workflow run run-epic-generator.yml \
+            --repo "$REPO" \
+            --field project_name="${{ inputs.project_name }}" \
+            --field business_problem="${{ inputs.business_problem }}" \
+            --field scope_boundaries="Full end-to-end brokerage platform for ${{ inputs.business_domain }}" \
+            --field target_users="${{ inputs.target_users }}"
+          echo "Triggered Epic Generator"
+
+      - name: Trigger Feasibility Analyzer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh workflow run run-feasibility-analyzer.yml \
+            --repo "$REPO" \
+            --field project_name="${{ inputs.project_name }}" \
+            --field business_problem="${{ inputs.business_problem }}" \
+            --field business_domain="${{ inputs.business_domain }}" \
+            --field timeline_constraint="12 months" \
+            --field key_dependencies="Regulatory approvals, core banking integration, identity verification service"
+          echo "Triggered Feasibility Analyzer"
+
+      - name: Trigger Test Data Identifier
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          gh workflow run run-test-data-identifier.yml \
+            --repo "$REPO" \
+            --field project_name="${{ inputs.project_name }}" \
+            --field business_problem="${{ inputs.business_problem }}" \
+            --field key_user_flows="Account opening, trade execution, portfolio viewing, funds transfer, reporting" \
+            --field compliance_requirements="SEC regulations, FINRA rules, AML/KYC requirements, data privacy (GDPR/CCPA)"
+          echo "Triggered Test Data Identifier"
+
+      - name: Wait for sub-workflows to complete
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          PROJECT_NAME="${{ inputs.project_name }}"
+
+          WORKFLOWS=(
+            "run-prfaq-writer.yml"
+            "run-stakeholder-analyzer.yml"
+            "run-epic-generator.yml"
+            "run-feasibility-analyzer.yml"
+            "run-test-data-identifier.yml"
+          )
+
+          # Give workflows a moment to be registered before polling
+          sleep 15
+
+          for WORKFLOW in "${WORKFLOWS[@]}"; do
+            echo "Waiting for $WORKFLOW to complete..."
+            MAX_WAIT=600
+            ELAPSED=0
+            POLL_INTERVAL=20
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              STATUS=$(gh run list \
+                --repo "$REPO" \
+                --workflow "$WORKFLOW" \
+                --limit 1 \
+                --json status,conclusion \
+                --jq '.[0].status' 2>/dev/null || echo "unknown")
+
+              CONCLUSION=$(gh run list \
+                --repo "$REPO" \
+                --workflow "$WORKFLOW" \
+                --limit 1 \
+                --json status,conclusion \
+                --jq '.[0].conclusion' 2>/dev/null || echo "")
+
+              echo "  $WORKFLOW status: $STATUS / conclusion: $CONCLUSION"
+
+              if [ "$STATUS" = "completed" ]; then
+                if [ "$CONCLUSION" = "success" ]; then
+                  echo "  $WORKFLOW completed successfully"
+                  break
+                else
+                  echo "  WARNING: $WORKFLOW completed with conclusion: $CONCLUSION"
+                  break
+                fi
+              fi
+
+              sleep $POLL_INTERVAL
+              ELAPSED=$((ELAPSED + POLL_INTERVAL))
+            done
+
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo "  WARNING: Timed out waiting for $WORKFLOW after ${MAX_WAIT}s"
+            fi
+          done
+
+      - name: Pull latest changes from sub-workflows
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git pull --rebase origin ${{ github.ref_name }}
+
+      - name: Create Inception Summary index
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          TARGET_USERS="${{ inputs.target_users }}"
+          BUSINESS_DOMAIN="${{ inputs.business_domain }}"
+          RUN_DATE=$(date -u +"%Y-%m-%d %H:%M UTC")
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          mkdir -p docs/inception
+
+          cat > docs/inception/INCEPTION_SUMMARY.md << EOF
+          # Inception Summary: ${PROJECT_NAME}
+
+          Generated by the Inception Launchpad Orchestrator on ${RUN_DATE}.
+
+          [View orchestrator run](${RUN_URL})
+
+          ---
+
+          ## Project Overview
+
+          | Field | Value |
+          |-------|-------|
+          | **Project Name** | ${PROJECT_NAME} |
+          | **Business Problem** | ${BUSINESS_PROBLEM} |
+          | **Target Users** | ${TARGET_USERS} |
+          | **Business Domain** | ${BUSINESS_DOMAIN} |
+          | **Generated** | ${RUN_DATE} |
+
+          ---
+
+          ## Generated Artifacts
+
+          | Artifact | File | Description |
+          |----------|------|-------------|
+          | Press Release & FAQ | [PRFAQ.md](./PRFAQ.md) | Amazon Working Backwards press release and 8-10 FAQ items covering customer value, features, risks, and success metrics |
+          | Stakeholder Analysis | [STAKEHOLDER_ANALYSIS.md](./STAKEHOLDER_ANALYSIS.md) | Full stakeholder map with impact levels, engagement strategies, and key concerns for all internal and external groups |
+          | Epics | [EPICS.md](./EPICS.md) | 5-8 agile epics with user stories, acceptance criteria, complexity estimates, and a dependency map |
+          | Feasibility Report | [FEASIBILITY_REPORT.md](./FEASIBILITY_REPORT.md) | Technical, business, resource, and timeline feasibility with risk matrix and Go/No-Go recommendation |
+          | Test Data Requirements | [TEST_DATA_REQUIREMENTS.md](./TEST_DATA_REQUIREMENTS.md) | Test data categories, 10+ test scenarios, PII masking rules, and data volume estimates |
+
+          ---
+
+          ## How to Use These Artifacts
+
+          1. **Start with the PRFAQ** to align stakeholders on the product vision and customer value.
+          2. **Review the Stakeholder Analysis** to plan your engagement and communication strategy.
+          3. **Use the Feasibility Report** to inform the Go/No-Go decision with leadership.
+          4. **Hand the Epics** to your delivery team as the initial backlog for sprint planning.
+          5. **Give the Test Data Requirements** to your QA and data engineering teams early so test environments are ready.
+
+          ---
+
+          *Generated by [Inception Launchpad](https://github.com/${{ github.repository }}) — a GitHub Actions-powered AI agent suite for brokerage product inception.*
+          EOF
+
+          # Remove leading whitespace caused by heredoc indentation
+          sed -i 's/^          //' docs/inception/INCEPTION_SUMMARY.md
+
+      - name: Commit and push summary
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/INCEPTION_SUMMARY.md
+          git commit -m "feat: Generated Inception Summary index for ${{ inputs.project_name }}"
+          git push

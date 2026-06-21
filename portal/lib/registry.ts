@@ -1,3 +1,5 @@
+import yaml from 'js-yaml';
+
 export type Maturity = 'experimental' | 'pilot' | 'production';
 
 export interface AgentInput {
@@ -6,7 +8,7 @@ export interface AgentInput {
   description: string;
   type: 'text' | 'textarea' | 'select';
   required: boolean;
-  options?: string[]; // for select type
+  options?: string[];
   placeholder?: string;
 }
 
@@ -14,7 +16,7 @@ export interface AgentOutput {
   id: string;
   label: string;
   description: string;
-  artifact: string; // filename pattern e.g. "prfaq.md"
+  artifact: string;
 }
 
 export interface Agent {
@@ -26,10 +28,13 @@ export interface Agent {
   owner: string;
   inputs: AgentInput[];
   outputs: AgentOutput[];
-  related: string[]; // ids of related agents
+  related: string[];
 }
 
-const agents: Agent[] = [
+// ---------------------------------------------------------------------------
+// Fallback mock data (used when GitHub API is unavailable, e.g. in local dev)
+// ---------------------------------------------------------------------------
+const MOCK_AGENTS: Agent[] = [
   {
     id: 'orchestrator',
     business_name: 'Full Inception Package',
@@ -344,22 +349,128 @@ const agents: Agent[] = [
   },
 ];
 
-export function getAllAgents(): Agent[] {
-  return agents;
+// ---------------------------------------------------------------------------
+// GitHub Contents API helpers
+// ---------------------------------------------------------------------------
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const REPO_OWNER = process.env.GITHUB_REPO_OWNER ?? 'rwk3785';
+const REPO_NAME = process.env.GITHUB_REPO_NAME ?? 'inception-launchpad';
+const BASE_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
+
+function githubHeaders(): HeadersInit {
+  const headers: HeadersInit = {
+    Accept: 'application/vnd.github.v3+json',
+  };
+  if (GITHUB_TOKEN) {
+    headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+  }
+  return headers;
 }
 
-export function getAgentById(id: string): Agent | undefined {
-  return agents.find((a) => a.id === id);
+async function fetchFileContent(path: string): Promise<string> {
+  const url = `${BASE_URL}/contents/${path}`;
+  const res = await fetch(url, {
+    headers: githubHeaders(),
+    // Cache with 60-second revalidation via Next.js fetch cache
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore – Next.js extended fetch option
+    next: { revalidate: 60 },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `GitHub Contents API error for "${path}": ${res.status} ${res.statusText}`
+    );
+  }
+
+  const data = (await res.json()) as { content: string };
+  return Buffer.from(data.content, 'base64').toString('utf-8');
 }
 
-export function getSubAgents(): Agent[] {
+// ---------------------------------------------------------------------------
+// Index parsing — registry/index.yaml lists agent IDs
+// ---------------------------------------------------------------------------
+async function fetchAgentIdsFromIndex(): Promise<string[]> {
+  const raw = await fetchFileContent('registry/index.yaml');
+  const parsed = yaml.load(raw) as { agents: string[] } | string[] | null;
+
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object' && Array.isArray(parsed.agents)) {
+    return parsed.agents;
+  }
+  throw new Error('Unexpected shape for registry/index.yaml');
+}
+
+// ---------------------------------------------------------------------------
+// Single-agent manifest parsing
+// ---------------------------------------------------------------------------
+async function fetchAgentManifest(id: string): Promise<Agent> {
+  const raw = await fetchFileContent(`agents/${id}.yaml`);
+  const parsed = yaml.load(raw) as Partial<Agent> & { id?: string };
+
+  // Ensure the id field is set (manifest may or may not include it)
+  return { id, ...parsed } as Agent;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all agent manifests from the GitHub repo.
+ * Falls back to hardcoded mock data if the API is unavailable.
+ */
+export async function getAllAgents(): Promise<Agent[]> {
+  if (!GITHUB_TOKEN) {
+    console.warn('[registry] No GITHUB_TOKEN — using mock agent data');
+    return MOCK_AGENTS;
+  }
+
+  try {
+    const ids = await fetchAgentIdsFromIndex();
+    const agents = await Promise.all(ids.map((id) => fetchAgentManifest(id)));
+    return agents;
+  } catch (err) {
+    console.error('[registry] GitHub API error, falling back to mock data:', err);
+    return MOCK_AGENTS;
+  }
+}
+
+/**
+ * Fetch a single agent manifest by ID.
+ * Falls back to the mock list on error.
+ */
+export async function getAgentById(id: string): Promise<Agent | null> {
+  if (!GITHUB_TOKEN) {
+    console.warn('[registry] No GITHUB_TOKEN — using mock agent data');
+    return MOCK_AGENTS.find((a) => a.id === id) ?? null;
+  }
+
+  try {
+    return await fetchAgentManifest(id);
+  } catch (err) {
+    console.error(`[registry] Failed to fetch agent "${id}", falling back:`, err);
+    return MOCK_AGENTS.find((a) => a.id === id) ?? null;
+  }
+}
+
+/**
+ * Return all agents except the orchestrator.
+ */
+export async function getSubAgents(): Promise<Agent[]> {
+  const agents = await getAllAgents();
   return agents.filter((a) => a.id !== 'orchestrator');
 }
 
-export function getRelatedAgents(agentId: string): Agent[] {
-  const agent = getAgentById(agentId);
-  if (!agent) return [];
-  return agent.related
-    .map((id) => getAgentById(id))
-    .filter((a): a is Agent => a !== undefined);
+/**
+ * Return agents related to the given agent based on its `related` field.
+ */
+export async function getRelatedAgents(id: string): Promise<Agent[]> {
+  const agent = await getAgentById(id);
+  if (!agent || !agent.related?.length) return [];
+
+  const results = await Promise.all(
+    agent.related.map((relatedId) => getAgentById(relatedId))
+  );
+  return results.filter((a): a is Agent => a !== null);
 }

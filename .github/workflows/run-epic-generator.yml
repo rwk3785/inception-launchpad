@@ -1,0 +1,100 @@
+name: Epic Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      scope_boundaries:
+        description: "Scope Boundaries"
+        required: true
+        type: string
+      target_users:
+        description: "Target Users"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Epics with Claude
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          SCOPE_BOUNDARIES="${{ inputs.scope_boundaries }}"
+          TARGET_USERS="${{ inputs.target_users }}"
+
+          PROMPT="Break down a brokerage product initiative into epics suitable for agile delivery using the following details:
+
+Project Name: ${PROJECT_NAME}
+Business Problem: ${BUSINESS_PROBLEM}
+Scope Boundaries: ${SCOPE_BOUNDARIES}
+Target Users: ${TARGET_USERS}
+
+For each epic provide:
+- Epic title
+- Business objective
+- User story summary in the format: \"As a [user] I want [goal] so that [benefit]\"
+- Acceptance criteria (3-5 bullet points)
+- Dependencies (on other epics or external systems)
+- Estimated complexity (S/M/L/XL)
+- Suggested team (e.g., frontend, backend, data, compliance)
+
+Generate 5-8 epics that together cover the full scope of the initiative. The epics should be coherent, non-overlapping, and deliverable in logical sequence.
+
+Include a dependency map section at the end that shows the sequencing and relationships between epics.
+
+Format the entire output as structured markdown."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 4096,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }")
+
+          echo "API Response received"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "ERROR: Empty or null response from API"
+            echo "Full response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "$CONTENT" > output.md
+
+      - name: Save artifact
+        run: |
+          mkdir -p docs/inception
+          cp output.md docs/inception/EPICS.md
+
+      - name: Commit and push
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/
+          git commit -m "feat: Generated Epics for ${{ inputs.project_name }}"
+          git push

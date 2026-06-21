@@ -1,0 +1,94 @@
+name: Stakeholder Analyzer
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      business_domain:
+        description: "Business Domain"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Stakeholder Analysis with Claude
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          BUSINESS_DOMAIN="${{ inputs.business_domain }}"
+
+          PROMPT="Analyze and identify all stakeholders for a brokerage product initiative with the following details:
+
+Project Name: ${PROJECT_NAME}
+Business Problem: ${BUSINESS_PROBLEM}
+Business Domain: ${BUSINESS_DOMAIN}
+
+For each stakeholder group produce:
+- Role/title
+- Interest in the project
+- Potential impact (high/medium/low)
+- Engagement strategy
+- Key concerns to address
+
+Include internal stakeholders (business, tech, compliance, ops) and external stakeholders (customers, regulators, partners).
+
+Format as a structured markdown document with:
+1. A summary table at the top showing all stakeholder groups, their impact level, and engagement strategy
+2. Detailed sections per stakeholder group below the table
+
+Be thorough and specific to the brokerage/financial services domain."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 4096,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }")
+
+          echo "API Response received"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "ERROR: Empty or null response from API"
+            echo "Full response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "$CONTENT" > output.md
+
+      - name: Save artifact
+        run: |
+          mkdir -p docs/inception
+          cp output.md docs/inception/STAKEHOLDER_ANALYSIS.md
+
+      - name: Commit and push
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/
+          git commit -m "feat: Generated Stakeholder Analysis for ${{ inputs.project_name }}"
+          git push

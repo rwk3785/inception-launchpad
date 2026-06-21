@@ -1,0 +1,115 @@
+name: Test Data Identifier
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Project Name"
+        required: true
+        type: string
+      business_problem:
+        description: "Business Problem"
+        required: true
+        type: string
+      key_user_flows:
+        description: "Key User Flows"
+        required: true
+        type: string
+      compliance_requirements:
+        description: "Compliance Requirements"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Test Data Requirements with Claude
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PROJECT_NAME="${{ inputs.project_name }}"
+          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
+          KEY_USER_FLOWS="${{ inputs.key_user_flows }}"
+          COMPLIANCE_REQUIREMENTS="${{ inputs.compliance_requirements }}"
+
+          PROMPT="Identify test data requirements and scenarios for a brokerage product initiative with the following details:
+
+Project Name: ${PROJECT_NAME}
+Business Problem: ${BUSINESS_PROBLEM}
+Key User Flows: ${KEY_USER_FLOWS}
+Compliance Requirements: ${COMPLIANCE_REQUIREMENTS}
+
+The document must cover:
+
+1. Test Data Categories
+   - Account types (e.g., individual, joint, retirement, institutional)
+   - Transaction types relevant to the brokerage domain
+   - User personas (novice investor, active trader, institutional, etc.)
+
+2. Compliance and Regulatory Data Needs
+   - Based specifically on the compliance requirements: \"${COMPLIANCE_REQUIREMENTS}\"
+   - Required regulatory data fields, audit trail requirements, reporting data
+
+3. Key Test Scenarios
+   - At minimum 10 scenarios covering:
+     - Happy path flows for each key user flow
+     - Edge cases (boundary values, unusual states)
+     - Negative cases (invalid inputs, error conditions, unauthorized access)
+   - Present scenarios as a markdown table with columns: Scenario ID, Description, Data Required, Expected Outcome, Type (Happy/Edge/Negative)
+
+4. Data Masking and Privacy Requirements
+   - PII fields that must be masked or anonymized
+   - Approach for each PII category in a brokerage context
+
+5. Test Environment Data Strategy
+   - How test data will be provisioned, refreshed, and isolated per environment (dev/QA/staging)
+
+6. Data Volume Estimates
+   - Recommended record counts per data category for adequate test coverage
+
+Format as structured markdown with scenario tables."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 4096,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }")
+
+          echo "API Response received"
+
+          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
+            echo "ERROR: Empty or null response from API"
+            echo "Full response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "$CONTENT" > output.md
+
+      - name: Save artifact
+        run: |
+          mkdir -p docs/inception
+          cp output.md docs/inception/TEST_DATA_REQUIREMENTS.md
+
+      - name: Commit and push
+        run: |
+          git config user.email "inception-bot@launchpad"
+          git config user.name "Inception Launchpad Bot"
+          git add docs/inception/
+          git commit -m "feat: Generated Test Data Requirements for ${{ inputs.project_name }}"
+          git push

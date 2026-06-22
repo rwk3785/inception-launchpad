@@ -33,68 +33,62 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Feasibility Report with Claude
-        id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          BUSINESS_PROBLEM: ${{ inputs.business_problem }}
+          BUSINESS_DOMAIN: ${{ inputs.business_domain }}
+          TIMELINE_CONSTRAINT: ${{ inputs.timeline_constraint }}
+          KEY_DEPENDENCIES: ${{ inputs.key_dependencies }}
         run: |
-          PROJECT_NAME="${{ inputs.project_name }}"
-          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
-          BUSINESS_DOMAIN="${{ inputs.business_domain }}"
-          TIMELINE_CONSTRAINT="${{ inputs.timeline_constraint }}"
-          KEY_DEPENDENCIES="${{ inputs.key_dependencies }}"
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-          PROMPT="Produce a feasibility analysis for a brokerage product initiative with the following details:
+          prompt = (
+              "Produce a feasibility analysis for a brokerage product initiative with the following details:\n\n"
+              "Project Name: " + os.environ['PROJECT_NAME'] + "\n"
+              "Business Problem: " + os.environ['BUSINESS_PROBLEM'] + "\n"
+              "Business Domain: " + os.environ['BUSINESS_DOMAIN'] + "\n"
+              "Timeline Constraint: " + os.environ['TIMELINE_CONSTRAINT'] + "\n"
+              "Key Dependencies: " + os.environ['KEY_DEPENDENCIES'] + "\n\n"
+              "The report must cover these sections:\n\n"
+              "1. Executive Summary - brief overview of the initiative and overall feasibility verdict\n"
+              "2. Technical Feasibility - complexity assessment, technology risks, integration needs\n"
+              "3. Business Feasibility - market fit, ROI potential, strategic alignment\n"
+              "4. Resource Feasibility - team skills required, capacity considerations, budget factors\n"
+              "5. Timeline Feasibility - given the constraint of \"" + os.environ['TIMELINE_CONSTRAINT'] + "\", assess achievability and propose key milestones\n"
+              "6. Risk Assessment - top 5 risks with a likelihood/impact matrix (High/Medium/Low for each dimension)\n"
+              "7. Recommendation - Go / No-Go / Conditional Go with clear rationale\n\n"
+              "Include a summary scorecard at the very top of the document that rates each feasibility dimension (Technical, Business, Resource, Timeline) on a scale of Red/Amber/Green with a one-line justification.\n\n"
+              "Format as a professional markdown report."
+          )
 
-Project Name: ${PROJECT_NAME}
-Business Problem: ${BUSINESS_PROBLEM}
-Business Domain: ${BUSINESS_DOMAIN}
-Timeline Constraint: ${TIMELINE_CONSTRAINT}
-Key Dependencies: ${KEY_DEPENDENCIES}
+          payload = json.dumps({
+              "model": "claude-opus-4-5",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-The report must cover these sections:
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
 
-1. Executive Summary - brief overview of the initiative and overall feasibility verdict
-2. Technical Feasibility - complexity assessment, technology risks, integration needs
-3. Business Feasibility - market fit, ROI potential, strategic alignment
-4. Resource Feasibility - team skills required, capacity considerations, budget factors
-5. Timeline Feasibility - given the constraint of \"${TIMELINE_CONSTRAINT}\", assess achievability and propose key milestones
-6. Risk Assessment - top 5 risks with a likelihood/impact matrix (High/Medium/Low for each dimension)
-7. Recommendation - Go / No-Go / Conditional Go with clear rationale
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-Include a summary scorecard at the very top of the document that rates each feasibility dimension (Technical, Business, Resource, Timeline) on a scale of Red/Amber/Green with a one-line justification.
-
-Format as a professional markdown report."
-
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 4096,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }")
-
-          echo "API Response received"
-
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
-
-          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-            echo "ERROR: Empty or null response from API"
-            echo "Full response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "$CONTENT" > output.md
-
-      - name: Save artifact
-        run: |
-          mkdir -p docs/inception
-          cp output.md docs/inception/FEASIBILITY_REPORT.md
+          content = data["content"][0]["text"]
+          os.makedirs("docs/inception", exist_ok=True)
+          with open("docs/inception/FEASIBILITY_REPORT.md", "w") as f:
+              f.write("# Feasibility Report: " + os.environ['PROJECT_NAME'] + "\n\n")
+              f.write(content)
+          print("Generated successfully")
+          PYEOF
 
       - name: Commit and push
         run: |

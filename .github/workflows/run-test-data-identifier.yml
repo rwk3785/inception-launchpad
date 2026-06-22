@@ -29,82 +29,72 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Test Data Requirements with Claude
-        id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          BUSINESS_PROBLEM: ${{ inputs.business_problem }}
+          KEY_USER_FLOWS: ${{ inputs.key_user_flows }}
+          COMPLIANCE_REQUIREMENTS: ${{ inputs.compliance_requirements }}
         run: |
-          PROJECT_NAME="${{ inputs.project_name }}"
-          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
-          KEY_USER_FLOWS="${{ inputs.key_user_flows }}"
-          COMPLIANCE_REQUIREMENTS="${{ inputs.compliance_requirements }}"
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-          PROMPT="Identify test data requirements and scenarios for a brokerage product initiative with the following details:
+          prompt = (
+              "Identify test data requirements and scenarios for a brokerage product initiative with the following details:\n\n"
+              "Project Name: " + os.environ['PROJECT_NAME'] + "\n"
+              "Business Problem: " + os.environ['BUSINESS_PROBLEM'] + "\n"
+              "Key User Flows: " + os.environ['KEY_USER_FLOWS'] + "\n"
+              "Compliance Requirements: " + os.environ['COMPLIANCE_REQUIREMENTS'] + "\n\n"
+              "The document must cover:\n\n"
+              "1. Test Data Categories\n"
+              "   - Account types (e.g., individual, joint, retirement, institutional)\n"
+              "   - Transaction types relevant to the brokerage domain\n"
+              "   - User personas (novice investor, active trader, institutional, etc.)\n\n"
+              "2. Compliance and Regulatory Data Needs\n"
+              "   - Based specifically on the compliance requirements: \"" + os.environ['COMPLIANCE_REQUIREMENTS'] + "\"\n"
+              "   - Required regulatory data fields, audit trail requirements, reporting data\n\n"
+              "3. Key Test Scenarios\n"
+              "   - At minimum 10 scenarios covering:\n"
+              "     - Happy path flows for each key user flow\n"
+              "     - Edge cases (boundary values, unusual states)\n"
+              "     - Negative cases (invalid inputs, error conditions, unauthorized access)\n"
+              "   - Present scenarios as a markdown table with columns: Scenario ID, Description, Data Required, Expected Outcome, Type (Happy/Edge/Negative)\n\n"
+              "4. Data Masking and Privacy Requirements\n"
+              "   - PII fields that must be masked or anonymized\n"
+              "   - Approach for each PII category in a brokerage context\n\n"
+              "5. Test Environment Data Strategy\n"
+              "   - How test data will be provisioned, refreshed, and isolated per environment (dev/QA/staging)\n\n"
+              "6. Data Volume Estimates\n"
+              "   - Recommended record counts per data category for adequate test coverage\n\n"
+              "Format as structured markdown with scenario tables."
+          )
 
-Project Name: ${PROJECT_NAME}
-Business Problem: ${BUSINESS_PROBLEM}
-Key User Flows: ${KEY_USER_FLOWS}
-Compliance Requirements: ${COMPLIANCE_REQUIREMENTS}
+          payload = json.dumps({
+              "model": "claude-opus-4-5",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-The document must cover:
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
 
-1. Test Data Categories
-   - Account types (e.g., individual, joint, retirement, institutional)
-   - Transaction types relevant to the brokerage domain
-   - User personas (novice investor, active trader, institutional, etc.)
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-2. Compliance and Regulatory Data Needs
-   - Based specifically on the compliance requirements: \"${COMPLIANCE_REQUIREMENTS}\"
-   - Required regulatory data fields, audit trail requirements, reporting data
-
-3. Key Test Scenarios
-   - At minimum 10 scenarios covering:
-     - Happy path flows for each key user flow
-     - Edge cases (boundary values, unusual states)
-     - Negative cases (invalid inputs, error conditions, unauthorized access)
-   - Present scenarios as a markdown table with columns: Scenario ID, Description, Data Required, Expected Outcome, Type (Happy/Edge/Negative)
-
-4. Data Masking and Privacy Requirements
-   - PII fields that must be masked or anonymized
-   - Approach for each PII category in a brokerage context
-
-5. Test Environment Data Strategy
-   - How test data will be provisioned, refreshed, and isolated per environment (dev/QA/staging)
-
-6. Data Volume Estimates
-   - Recommended record counts per data category for adequate test coverage
-
-Format as structured markdown with scenario tables."
-
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 4096,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }")
-
-          echo "API Response received"
-
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
-
-          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-            echo "ERROR: Empty or null response from API"
-            echo "Full response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "$CONTENT" > output.md
-
-      - name: Save artifact
-        run: |
-          mkdir -p docs/inception
-          cp output.md docs/inception/TEST_DATA_REQUIREMENTS.md
+          content = data["content"][0]["text"]
+          os.makedirs("docs/inception", exist_ok=True)
+          with open("docs/inception/TEST_DATA_REQUIREMENTS.md", "w") as f:
+              f.write("# Test Data Requirements: " + os.environ['PROJECT_NAME'] + "\n\n")
+              f.write(content)
+          print("Generated successfully")
+          PYEOF
 
       - name: Commit and push
         run: |

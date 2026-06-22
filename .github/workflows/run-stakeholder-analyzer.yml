@@ -25,65 +25,59 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Stakeholder Analysis with Claude
-        id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          BUSINESS_PROBLEM: ${{ inputs.business_problem }}
+          BUSINESS_DOMAIN: ${{ inputs.business_domain }}
         run: |
-          PROJECT_NAME="${{ inputs.project_name }}"
-          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
-          BUSINESS_DOMAIN="${{ inputs.business_domain }}"
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-          PROMPT="Analyze and identify all stakeholders for a brokerage product initiative with the following details:
+          prompt = (
+              "Analyze and identify all stakeholders for a brokerage product initiative with the following details:\n\n"
+              "Project Name: " + os.environ['PROJECT_NAME'] + "\n"
+              "Business Problem: " + os.environ['BUSINESS_PROBLEM'] + "\n"
+              "Business Domain: " + os.environ['BUSINESS_DOMAIN'] + "\n\n"
+              "For each stakeholder group produce:\n"
+              "- Role/title\n"
+              "- Interest in the project\n"
+              "- Potential impact level (High/Medium/Low)\n"
+              "- Engagement strategy\n"
+              "- Key concerns to address\n\n"
+              "Include internal stakeholders (business, tech, compliance, ops) and external stakeholders (customers, regulators, partners).\n\n"
+              "Format as a structured markdown document with:\n"
+              "1. A summary table at the top showing all stakeholder groups, their impact level, and engagement strategy\n"
+              "2. Detailed sections per stakeholder group below the table\n\n"
+              "Be thorough and specific to the brokerage/financial services domain."
+          )
 
-Project Name: ${PROJECT_NAME}
-Business Problem: ${BUSINESS_PROBLEM}
-Business Domain: ${BUSINESS_DOMAIN}
+          payload = json.dumps({
+              "model": "claude-opus-4-5",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-For each stakeholder group produce:
-- Role/title
-- Interest in the project
-- Potential impact (high/medium/low)
-- Engagement strategy
-- Key concerns to address
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
 
-Include internal stakeholders (business, tech, compliance, ops) and external stakeholders (customers, regulators, partners).
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-Format as a structured markdown document with:
-1. A summary table at the top showing all stakeholder groups, their impact level, and engagement strategy
-2. Detailed sections per stakeholder group below the table
-
-Be thorough and specific to the brokerage/financial services domain."
-
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 4096,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }")
-
-          echo "API Response received"
-
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
-
-          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-            echo "ERROR: Empty or null response from API"
-            echo "Full response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "$CONTENT" > output.md
-
-      - name: Save artifact
-        run: |
-          mkdir -p docs/inception
-          cp output.md docs/inception/STAKEHOLDER_ANALYSIS.md
+          content = data["content"][0]["text"]
+          os.makedirs("docs/inception", exist_ok=True)
+          with open("docs/inception/STAKEHOLDER_ANALYSIS.md", "w") as f:
+              f.write("# Stakeholder Analysis: " + os.environ['PROJECT_NAME'] + "\n\n")
+              f.write(content)
+          print("Generated successfully")
+          PYEOF
 
       - name: Commit and push
         run: |

@@ -29,67 +29,61 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate Epics with Claude
-        id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          BUSINESS_PROBLEM: ${{ inputs.business_problem }}
+          SCOPE_BOUNDARIES: ${{ inputs.scope_boundaries }}
+          TARGET_USERS: ${{ inputs.target_users }}
         run: |
-          PROJECT_NAME="${{ inputs.project_name }}"
-          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
-          SCOPE_BOUNDARIES="${{ inputs.scope_boundaries }}"
-          TARGET_USERS="${{ inputs.target_users }}"
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-          PROMPT="Break down a brokerage product initiative into epics suitable for agile delivery using the following details:
+          prompt = (
+              "Break down a brokerage product initiative into epics suitable for agile delivery using the following details:\n\n"
+              "Project Name: " + os.environ['PROJECT_NAME'] + "\n"
+              "Business Problem: " + os.environ['BUSINESS_PROBLEM'] + "\n"
+              "Scope Boundaries: " + os.environ['SCOPE_BOUNDARIES'] + "\n"
+              "Target Users: " + os.environ['TARGET_USERS'] + "\n\n"
+              "For each epic provide:\n"
+              "- Epic title\n"
+              "- Business objective\n"
+              "- User story summary in the format: \"As a [user] I want [goal] so that [benefit]\"\n"
+              "- Acceptance criteria (3-5 bullet points)\n"
+              "- Dependencies (on other epics or external systems)\n"
+              "- Estimated complexity (S/M/L/XL)\n"
+              "- Suggested team (e.g., frontend, backend, data, compliance)\n\n"
+              "Generate 5-8 epics that together cover the full scope of the initiative. The epics should be coherent, non-overlapping, and deliverable in logical sequence.\n\n"
+              "Include a dependency map section at the end that shows the sequencing and relationships between epics.\n\n"
+              "Format the entire output as structured markdown."
+          )
 
-Project Name: ${PROJECT_NAME}
-Business Problem: ${BUSINESS_PROBLEM}
-Scope Boundaries: ${SCOPE_BOUNDARIES}
-Target Users: ${TARGET_USERS}
+          payload = json.dumps({
+              "model": "claude-opus-4-5",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-For each epic provide:
-- Epic title
-- Business objective
-- User story summary in the format: \"As a [user] I want [goal] so that [benefit]\"
-- Acceptance criteria (3-5 bullet points)
-- Dependencies (on other epics or external systems)
-- Estimated complexity (S/M/L/XL)
-- Suggested team (e.g., frontend, backend, data, compliance)
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
 
-Generate 5-8 epics that together cover the full scope of the initiative. The epics should be coherent, non-overlapping, and deliverable in logical sequence.
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-Include a dependency map section at the end that shows the sequencing and relationships between epics.
-
-Format the entire output as structured markdown."
-
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 4096,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }")
-
-          echo "API Response received"
-
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
-
-          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-            echo "ERROR: Empty or null response from API"
-            echo "Full response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "$CONTENT" > output.md
-
-      - name: Save artifact
-        run: |
-          mkdir -p docs/inception
-          cp output.md docs/inception/EPICS.md
+          content = data["content"][0]["text"]
+          os.makedirs("docs/inception", exist_ok=True)
+          with open("docs/inception/EPICS.md", "w") as f:
+              f.write("# Epics: " + os.environ['PROJECT_NAME'] + "\n\n")
+              f.write(content)
+          print("Generated successfully")
+          PYEOF
 
       - name: Commit and push
         run: |

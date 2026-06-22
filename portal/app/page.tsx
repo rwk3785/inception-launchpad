@@ -3,9 +3,11 @@ import { getAllAgents, getAgentById, getSubAgents } from '@/lib/registry';
 import AgentCard from '@/components/AgentCard';
 import MaturityBadge from '@/components/MaturityBadge';
 
-export default function HomePage() {
-  const orchestrator = getAgentById('orchestrator');
-  const subAgents = getSubAgents();
+export default async function HomePage() {
+  const [orchestrator, subAgents] = await Promise.all([
+    getAgentById('orchestrator'),
+    getSubAgents(),
+  ]);
 
   return (
     <div>

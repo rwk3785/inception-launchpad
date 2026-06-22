@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const runId = await triggerAgentRun(agentId, inputs ?? {});
+    const workflowFile = `run-${agentId}.yml`;
+    const runId = await triggerAgentRun(agentId, workflowFile, inputs ?? {});
 
     return NextResponse.json({ runId }, { status: 202 });
   } catch (err) {

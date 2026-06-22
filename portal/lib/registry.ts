@@ -406,9 +406,25 @@ async function fetchAgentIdsFromIndex(): Promise<string[]> {
 // ---------------------------------------------------------------------------
 async function fetchAgentManifest(id: string): Promise<Agent> {
   const raw = await fetchFileContent(`agents/${id}.yaml`);
-  const parsed = yaml.load(raw) as Partial<Agent> & { id?: string };
+  const parsed = yaml.load(raw) as any;
 
-  // Ensure the id field is set (manifest may or may not include it)
+  // Normalize inputs: YAML uses `name` as the field key, component expects `id`
+  if (Array.isArray(parsed?.inputs)) {
+    parsed.inputs = parsed.inputs.map((input: any) => ({
+      ...input,
+      id: input.id ?? input.name,
+    }));
+  }
+
+  // Normalize outputs: YAML may not have an `id` or `label` field
+  if (Array.isArray(parsed?.outputs)) {
+    parsed.outputs = parsed.outputs.map((output: any, i: number) => ({
+      ...output,
+      id: output.id ?? output.artifact ?? `output-${i}`,
+      label: output.label ?? output.description ?? output.artifact,
+    }));
+  }
+
   return { id, ...parsed } as Agent;
 }
 

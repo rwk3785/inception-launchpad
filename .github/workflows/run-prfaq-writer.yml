@@ -29,68 +29,55 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate PRFAQ with Claude
-        id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          BUSINESS_PROBLEM: ${{ inputs.business_problem }}
+          TARGET_USERS: ${{ inputs.target_users }}
+          KEY_BENEFIT: ${{ inputs.key_benefit }}
         run: |
-          PROJECT_NAME="${{ inputs.project_name }}"
-          BUSINESS_PROBLEM="${{ inputs.business_problem }}"
-          TARGET_USERS="${{ inputs.target_users }}"
-          KEY_BENEFIT="${{ inputs.key_benefit }}"
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-          PROMPT="Generate a Press Release and FAQ document for a brokerage product initiative with the following details:
+          prompt = (
+              "Generate a Press Release and FAQ document for a brokerage product initiative.\n\n"
+              "Project Name: " + os.environ['PROJECT_NAME'] + "\n"
+              "Business Problem: " + os.environ['BUSINESS_PROBLEM'] + "\n"
+              "Target Users: " + os.environ['TARGET_USERS'] + "\n"
+              "Key Benefit: " + os.environ['KEY_BENEFIT'] + "\n\n"
+              "Write an Amazon Working Backwards PR/FAQ with:\n"
+              "1. PRESS RELEASE: Headline, subheadline, date/location, 3 body paragraphs, customer quote, call to action\n"
+              "2. CUSTOMER FAQ: 5 questions customers would ask\n"
+              "3. INTERNAL FAQ: 5 questions the team needs to answer\n\n"
+              "Use plain business language. Format as markdown."
+          )
 
-Project Name: ${PROJECT_NAME}
-Business Problem: ${BUSINESS_PROBLEM}
-Target Users: ${TARGET_USERS}
-Key Benefit: ${KEY_BENEFIT}
+          payload = json.dumps({
+              "model": "claude-opus-4-5",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
 
-The press release should follow the Amazon Working Backwards format:
-- Headline
-- Subheadline
-- Location and date
-- Body paragraphs describing the customer problem and solution
-- A customer quote
-- A call to action
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
 
-The FAQ section should have 8-10 questions covering:
-- Customer value
-- Key features
-- Risks
-- Success metrics
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read())
 
-Write in plain business language, not technical jargon. Format the entire document as structured markdown."
-
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 4096,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }")
-
-          echo "API Response received"
-
-          CONTENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
-
-          if [ -z "$CONTENT" ] || [ "$CONTENT" = "null" ]; then
-            echo "ERROR: Empty or null response from API"
-            echo "Full response:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "$CONTENT" > output.md
-
-      - name: Save artifact
-        run: |
-          mkdir -p docs/inception
-          cp output.md docs/inception/PRFAQ.md
+          content = data["content"][0]["text"]
+          os.makedirs("docs/inception", exist_ok=True)
+          with open("docs/inception/PRFAQ.md", "w") as f:
+              f.write("# PRFAQ: " + os.environ['PROJECT_NAME'] + "\n\n")
+              f.write(content)
+          print("PRFAQ generated successfully")
+          PYEOF
 
       - name: Commit and push
         run: |
